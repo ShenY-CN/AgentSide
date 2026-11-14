@@ -378,19 +378,68 @@ local function sizeTo(cx, tab, pane, want)
 	end
 end
 
--- Moves the panel into `tab`, left of everything, unless it is already there.
+-- The leftmost leaf of `tree` that is a foreign canvas (another plugin's
+-- pinned panel, e.g. Overseer's Projects), skipping our own pane. Such a panel
+-- pins itself leftmost on its own tick, faster than ours: two panels claiming
+-- the same edge move each other every tick and the tab bounces. So when one is
+-- present we settle immediately to its right instead of taking the edge.
+-- A canvas is known by cx.canvas:list(), not pane kind: a panel opened as a
+-- float or glimpse reports no "canvas" pane kind.
+local function foreignCanvases(cx, skip)
+	local foreign = {}
+	for _, canvas in cx.canvas:list() do
+		if canvas.owner ~= OWNER and canvas.pane ~= skip then foreign[canvas.pane] = true end
+	end
+	return foreign
+end
+
+local function foreignLeftCanvas(tree, foreign, skip)
+	if not tree then return nil end
+	if tree.pane then
+		if tree.pane ~= skip and foreign[tree.pane] then return tree.pane end
+		return nil
+	end
+	return foreignLeftCanvas(tree[1], foreign, skip) or foreignLeftCanvas(tree[2], foreign, skip)
+end
+
+-- True when `pane` sits immediately right of `anchor` in `tree`: some
+-- "right"-split has `pane` in its right child and the left child's leftmost
+-- leaf is `anchor`. Nested splits above the pair still count.
+local function restingBeside(tree, pane, anchor)
+	if not tree or tree.pane then return false end
+	if tree.split == "right" and hasPane(tree[2], pane) then
+		local left = tree[1]
+		while left and not left.pane do left = left[1] end
+		if left and left.pane == anchor then return true end
+	end
+	return restingBeside(tree[1], pane, anchor) or restingBeside(tree[2], pane, anchor)
+end
+
+-- Moves the panel into `tab` at its resting place, unless it is already there.
 local function pin(cx, tab)
 	local pane = slot(cx)
 	if not pane then return end
 	local layout = cx.session:layout(tab)
 	if not layout then return end
 	local from = cx.session:tab_of(pane)
-	if from == tab and firstLeaf(layout.root) == pane then
-		panelTab = tab
-		return
+	-- The anchor we pin against: a foreign left canvas if one holds the edge,
+	-- else the tab's leftmost leaf. We go right of the anchor, leftmost without.
+	local foreign = foreignCanvases(cx, pane)
+	local anchor = foreignLeftCanvas(layout.root, foreign, pane) or firstLeaf(layout.root, pane)
+	if not anchor then return end
+	local dir = if anchor ~= pane and foreign[anchor] then "right" else "left"
+	-- Already at rest: leftmost with no foreign canvas, or sitting immediately
+	-- right of the anchor. A tick that finds us here costs nothing.
+	if from == tab then
+		if dir == "left" and firstLeaf(layout.root) == pane then
+			panelTab = tab
+			return
+		end
+		if dir == "right" and restingBeside(layout.root, pane, anchor) then
+			panelTab = tab
+			return
+		end
 	end
-	local target = firstLeaf(layout.root, pane)
-	if not target then return end
 	-- The width you left it at travels with it.
 	if from then
 		local current = leftShare(cx, from, pane)
@@ -406,7 +455,7 @@ local function pin(cx, tab)
 			cx.layout:unpark(pane, { focus = false })
 		end
 	end
-	cx.layout:move(pane, target, "left", { focus = false })
+	cx.layout:move(pane, anchor, dir, { focus = false })
 	sizeTo(cx, tab, pane, share)
 	panelTab = tab
 end
@@ -419,8 +468,7 @@ end
 local function openPanel(cx, tab)
 	local tree = render(cx)
 	local pane, err = cx.canvas:open({
-		title = TITLE, about = ABOUT, view = tree, how = "beside", focus = false,
-		target = cx.session:focused(), dir = "left", ratio = share,
+		title = TITLE, about = ABOUT, view = tree, how = "beside", focus = false, ratio = share,
 	})
 	if not pane then
 		tern.log.warn("Agent Sidebar: could not open the panel: " .. tostring(err))
