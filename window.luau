@@ -30,6 +30,16 @@ local CLI_AGENTS = {
 	hermes = true, kimi = true,
 }
 
+-- The vendor a command name belongs to, so a row can carry its mark. Values
+-- name a `agentSidebar.vendor<value>` rule in styles.css (the official
+-- lobe-icons glyph on its brand square); an unknown name gets no icon.
+local VENDOR = {
+	claude = "anthropic", codex = "codex", omp = "omp", pi = "omp",
+	gemini = "gemini", opencode = "opencode", aider = "aider", amp = "amp",
+	["cursor-agent"] = "cursor", crush = "crush", goose = "block", hermes = "nous",
+	kimi = "kimi",
+}
+
 -- How a row's state reads. styles.css draws the dot that goes with it.
 local WORD = {
 	blocked = "needs you", failed = "failed", done = "done",
@@ -40,8 +50,10 @@ local WORD = {
 -- needs you first.
 local RANK = { blocked = 6, failed = 5, done = 4, working = 3, idle = 2, exited = 1 }
 
--- agents[pane] = { pane, kind = "block"|"cli", state, label, cwd, tab,
---   session, message, updatedAt }. Rebuilt from Tern's listings, never saved.
+-- agents[pane] = { pane, kind = "block"|"cli", state, label, title, vendor,
+--   cwd, tab, session, message, updatedAt }. `label` is what the row shows:
+-- the conversation title when Tern gives the pane one, else the command name.
+-- Rebuilt from Tern's listings, never saved.
 local agents = {}
 
 -- finished[pane key] = "done" | "failed": turns that ended out of sight. Kept
@@ -108,6 +120,34 @@ local function cliName(line)
 		end
 	end
 	return nil
+end
+
+-- What a row is called and whose mark it carries. `title` (the pane's
+-- conversation title) leads when it says more than the bare command; the
+-- command name is the fallback and picks the vendor icon. `program` (the
+-- block's program, always set for an agent block) backs the vendor up when
+-- the launch command is missing, so a row never loses its mark over that.
+local function identity(command, title, program)
+	local name = commandName(command)
+	local vendor = (name and VENDOR[name]) or (program and VENDOR[program]) or nil
+	local label = name
+	if title and title ~= "" then
+		-- A title that only restates the command (Tern's default) adds nothing.
+		local bare = name and title:lower():find(name:lower(), 1, true)
+		if not bare or #title > #name + 2 then label = title end
+	end
+	if not label or label == "" then label = program end
+	return label or "Agent", vendor
+end
+
+-- omp's working messages lead with a spinner: Braille frames (U+2800–28FF)
+-- that turn over many times a second. Left in, every frame reads as a changed
+-- row and the panel repaints at that rate; stripped, a working agent's row is
+-- stable until the words actually change.
+local function despinner(text)
+	if not text then return nil end
+	-- Braille bytes are 0xE2 0x80/0x81/0x82 0x80–0xBF in UTF-8; drop the run.
+	return (string.gsub(text, "\226[\128-\130][\128-\191]+", ""))
 end
 
 -- The state a row shows: an unseen finished turn first (it is cleared the
@@ -198,29 +238,39 @@ local function dotNode(state)
 	return ui.el("div", { key = "dot", role = DOT_ROLE[state] or DOT_ROLE.idle })
 end
 
+-- The vendor's mark, drawn by styles.css from the role alone; no node when
+-- the command maps to no vendor.
+local function vendorNode(vendor)
+	if not vendor then return nil end
+	return ui.el("div", { key = "vendor", role = "agentSidebar.vendor" .. vendor, title = vendor })
+end
+
 local function rowNode(record, state)
 	local word = WORD[state] or WORD.idle
 	local where = basename(record.cwd)
 	local meta = word .. (where ~= "" and (" · " .. where) or "")
 	local label = { ui.span(record.label) }
 	if record.kind == "cli" then table.insert(label, ui.span(" (cli)", "muted")) end
+	local kids = { vendorNode(record.vendor), dotNode(state) }
+	-- A missing vendor leaves a hole in the children array; compact it away.
+	local compact = {}
+	for _, kid in kids do if kid then table.insert(compact, kid) end end
+	table.insert(compact, ui.node("text", { key = "label", role = "agentSidebar.label", spans = label }))
+	table.insert(compact, ui.node("row", { key = "spacer", grow = 1 }, {}))
+	table.insert(compact, ui.node("text", { key = "meta", role = "agentSidebar.meta", text = meta }))
 	return ui.node("row", {
 		key = "p" .. tostring(record.pane),
 		role = "agentSidebar.row",
 		title = tooltip(record, word),
 		aria = record.label .. ", " .. word,
 		actions = { click = "focus=" .. tostring(record.pane) },
-	}, {
-		dotNode(state),
-		ui.node("text", { key = "label", role = "agentSidebar.label", spans = label }),
-		ui.node("row", { key = "spacer", grow = 1 }, {}),
-		ui.node("text", { key = "meta", role = "agentSidebar.meta", text = meta }),
-	})
+	}, compact)
 end
 
 local function sessionNode(group)
 	local children = {
 		ui.node("row", { key = "head", role = "agentSidebar.sessionHead" }, {
+			ui.el("div", { key = "mark", role = "agentSidebar.sessionMark", title = "Session" }),
 			dotNode(group.worst),
 			ui.node("text", {
 				key = "name", role = "agentSidebar.sessionName", text = group.name, title = group.name,
@@ -283,9 +333,23 @@ local function render(cx)
 		return a.key < b.key
 	end)
 	local children = {}
+	table.insert(children, ui.node("row", { key = "head", role = "agentSidebar.header" }, {
+		ui.node("text", { key = "title", role = "agentSidebar.title", text = "Agent" }),
+	}))
+	-- The draw's change key: every field a row's pixels depend on, none they
+	-- don't. A message's words are left out (they only fill the tooltip), so a
+	-- working agent's stream of text never repaints the panel.
+	local fingerprint = {}
+	for _, group in groups do
+		table.insert(fingerprint, group.key .. ":" .. group.name .. ":" .. tostring(group.worst))
+		for _, row in group.rows do
+			local r = row.record
+			table.insert(fingerprint, table.concat({ tostring(r.pane), row.state, tostring(r.label), tostring(r.vendor), r.kind }, "\1"))
+		end
+	end
 	for _, group in groups do table.insert(children, sessionNode(group)) end
-	if #children == 0 then table.insert(children, emptyNode()) end
-	return ui.node("col", { key = "root", role = "agentSidebar.root" }, children)
+	if #groups == 0 then table.insert(children, emptyNode()) end
+	return ui.node("col", { key = "root", role = "agentSidebar.root" }, children), table.concat(fingerprint, "\2")
 end
 
 local function draw(cx)
@@ -297,8 +361,7 @@ local function draw(cx)
 		if canvas.pane == pane then ready = true end
 	end
 	if not ready then return end
-	local tree = render(cx)
-	local signature = tern.json.encode(tree)
+	local tree, signature = render(cx)
 	if rendered[pane] == signature then return end
 	cx.canvas:set(pane, { view = tree })
 	rendered[pane] = signature
@@ -466,7 +529,7 @@ local function shownTab(cx)
 end
 
 local function openPanel(cx, tab)
-	local tree = render(cx)
+	local tree, signature = render(cx)
 	local pane, err = cx.canvas:open({
 		title = TITLE, about = ABOUT, view = tree, how = "beside", focus = false, ratio = share,
 	})
@@ -475,7 +538,7 @@ local function openPanel(cx, tab)
 		return nil
 	end
 	panelPane, panelTab = pane, tab
-	rendered[pane] = tern.json.encode(tree)
+	rendered[pane] = signature
 	if tab then pin(cx, tab) end
 	return pane
 end
@@ -558,9 +621,12 @@ local function sync(cx)
 					agents[block.pane] = record
 				end
 				record.state = block.state
-				record.label = commandName(block.command) or ("Agent " .. tostring(block.pane))
+				record.command = block.command
+				record.program = info.program
+				record.title = if info.title and info.title ~= "" then info.title else nil
+				record.label, record.vendor = identity(block.command, record.title, info.program)
 				record.cwd = if block.cwd and block.cwd ~= "" then block.cwd else info.cwd
-				record.message = block.last_message
+				record.message = despinner(block.last_message)
 				record.tab = info.tab
 				record.session = (info.tab and tabSession[info.tab]) or record.session
 				record.updatedAt = tern.now()
@@ -579,7 +645,10 @@ local function sync(cx)
 				agents[info.pane] = record
 			end
 			record.state = "working"
+			record.title = if info.title and info.title ~= "" then info.title else nil
+			record.command = name
 			record.label = name
+			record.vendor = VENDOR[name]
 			record.cwd = info.cwd
 			record.message = nil
 			record.tab = info.tab
@@ -734,6 +803,19 @@ for _, name in { "tab_created", "tab_closed", "pane_created", "session_ended" } 
 		followSoon()
 	end)
 end
+
+-- A renamed conversation retitles its row in place; no rescan needed.
+tern.on("title", function(ev, _cx)
+	local record = agents[ev.pane]
+	if not record then return end
+	record.title = if ev.title and ev.title ~= "" then ev.title else nil
+	if record.kind == "block" then
+		record.label, record.vendor = identity(record.command, record.title, record.program)
+	else
+		record.label = if record.title then record.title else commandName(record.command) or record.label
+	end
+	redraw()
+end)
 
 -- The pane you look at is the one whose mark you have seen.
 tern.on("focus", function(ev, _cx)
