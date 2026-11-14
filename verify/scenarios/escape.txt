@@ -1,0 +1,3 @@
+# Dismisses whatever the previous scenario opened (the palette, a menu).
+key Escape
+wait 200

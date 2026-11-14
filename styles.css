@@ -1,0 +1,148 @@
+/* Badges, cards, buttons, menus and the empty-state card are Tern's own kinds
+   and carry no CSS here. What's left is the sidebar's layout: a canvas has no
+   `font` prop, so people's text is set in the UI face here and machine strings
+   (cwd basenames, command lines) in mono below. Status dots are plain divs
+   with a role per state, so their color and pulse live here. */
+
+/* State dots: one div per state, sized to sit on the text's baseline. `idle`
+   is hollow (a ring), `blocked` amber, `done` green, `failed` red, `exited`
+   grey, and `working` an accent dot that pulses. The pulse is transform-only
+   so the canvas never relayouts at the tick rate. */
+[data-role='agentSidebar.dot'],
+[data-role^='agentSidebar.dot'] {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  align-self: center;
+}
+[data-role='agentSidebar.dotWorking'] {
+  background: var(--accent);
+  animation: agentSidebarPulse 1.6s ease-in-out infinite;
+}
+[data-role='agentSidebar.dotBlocked'],
+[data-role='agentSidebar.dotWaiting'] {
+  background: var(--warn);
+}
+[data-role='agentSidebar.dotDone'] {
+  background: var(--ok);
+}
+[data-role='agentSidebar.dotFailed'] {
+  background: var(--bad);
+}
+[data-role='agentSidebar.dotExited'] {
+  background: var(--t4);
+}
+[data-role='agentSidebar.dotIdle'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--t3);
+}
+@keyframes agentSidebarPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-role='agentSidebar.dotWorking'] { animation: none; }
+}
+
+/* The panel can be 15% of a narrow frame (about 150px): every row of text
+   truncates, and nothing is allowed to widen past the canvas. */
+[data-role='agentSidebar.root'] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+  padding: 8px 6px 10px;
+  color: var(--t1);
+  font: 400 13px/18px var(--sans);
+}
+/* A session's rows sit tight; the gaps between sessions are the root's. */
+[data-role='agentSidebar.session'] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+/* The header is a name and a count: the name takes the free space's worth of
+   shrinking, the badge keeps its size at the right end. */
+[data-role='agentSidebar.sessionHead'] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 8px;
+  padding: 2px 8px;
+}
+[data-role='agentSidebar.sessionName'] {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-weight: 500;
+  color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Clicking a row focuses its pane, so it reads as a target: quiet until the
+   pointer or keyboard is on it, then the panel's own hover fill and a hairline
+   ring rather than Tern's focus outline, which would sit on the canvas edge. */
+[data-role='agentSidebar.row'] {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: var(--r-chip);
+  cursor: pointer;
+  overflow: hidden;
+}
+[data-role='agentSidebar.row']:hover {
+  background: var(--l1);
+}
+[data-role='agentSidebar.row']:focus-visible {
+  outline: none;
+  background: var(--l1);
+  box-shadow: inset 0 0 0 1px var(--l2);
+}
+[data-role='agentSidebar.label'] {
+  min-width: 0;
+  color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Paths and commands: machine strings, so mono, smaller, and quieter than the
+   label they follow. */
+[data-role='agentSidebar.meta'] {
+  min-width: 0;
+  color: var(--t3);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The empty state's card is Tern's; its text wraps rather than truncating,
+   because it is the one thing in the panel with no row to click. */
+[data-role='agentSidebar.empty'] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  gap: 4px;
+  padding: 12px 8px;
+  color: var(--t3);
+  font-size: 12px;
+  text-align: center;
+}
+[data-role='agentSidebar.emptyText'] {
+  min-width: 0;
+  color: var(--t3);
+  font-size: 12px;
+  line-height: 17px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

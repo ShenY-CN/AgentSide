@@ -1,0 +1,3 @@
+# A press on the first agent row: the sidebar focuses that pane.
+click [data-role='agentSidebar.row']
+wait 800

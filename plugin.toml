@@ -1,0 +1,8 @@
+schema = 1
+id = "agent-sidebar"
+name = "Agent Sidebar"
+version = "0.1.0"
+description = "Every coding agent in the window, grouped by session, with live state. Click a row to go to it."
+icon = "sparkle"
+window = "window.luau"
+styles = ["styles.css"]

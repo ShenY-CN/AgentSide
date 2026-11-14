@@ -1,0 +1,3 @@
+# The plugin's default chord: shows the Agent Sidebar, or hides it.
+key cmd+alt+shift+a
+wait 900

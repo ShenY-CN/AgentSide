@@ -1,0 +1,3 @@
+# The palette, queried for the plugin's scope: its toggle command is a row.
+palette sidebar
+wait 600
