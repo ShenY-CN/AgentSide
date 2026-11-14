@@ -6,10 +6,12 @@ Tern 的 coding agent 侧边栏插件：自动发现窗口里每一个正在运�
 
 ---
 
+![展示图](side.png)
+
 ## 功能一览
 
 | 能力 | 说明 |
-|---|---|
+| --- | --- |
 | **自动发现** | 原生 agent 块（`omp`、`pi` 等被 Tern 收编的块）+ 终端里运行的已知 CLI agent（`claude`、`codex`、`opencode`、`gemini`、`aider`、`amp`、`cursor-agent`、`crush`、`goose`、`hermes`、`kimi`），2 秒一轮刷新 |
 | **按 session 分组** | 每个 Tern session 一组，组头显示该组最差状态、agent 数量徽标和会话标识；当前 session 排最前 |
 | **实时状态点** | working（脉冲 accent）、idle（空心）、needs you（琥珀）、done（绿）、failed（红）、exited（灰） |
@@ -38,24 +40,13 @@ bash pack.sh                      # 产出 dist/agent-sidebar
 tern plugin install dist/agent-sidebar
 ```
 
-### 方式二：git URL（推荐用于分发）
+### 方式二：git URL
 
 ```sh
-tern plugin install https://github.com/<owner>/<repo>.git
-# 或 GitHub 简写（包在仓库根）
-tern plugin install github.com/<owner>/<repo>
-# 包在子目录时
-tern plugin install github.com/<owner>/<repo>/<子目录>
+tern plugin install https://github.com/ShenY-CN/AgentSide.git
 ```
 
 `install` 会把包拷贝到插件目录（`tern plugin dir` 查看路径）。重复安装加 `--force` 覆盖。
-
-### 开发模式（不拷贝，直接链接源码）
-
-```sh
-tern plugin link /path/to/agent-sidebar     # 改代码即生效，便于调试
-tern plugin unlink agent-sidebar            # 取消链接
-```
 
 ### 确认安装成功
 
@@ -68,7 +59,7 @@ tern plugin list        # 应显示:agent-sidebar 0.1.0 … ready
 ## 使用
 
 | 操作 | 方式 |
-|---|---|
+| --- | --- |
 | **显示 / 隐藏** | 快捷键 `⌘⌥⇧A`，或命令面板（`⌘⇧P`）搜「Agent Sidebar」 |
 | **定位到某个 agent** | 点击对应行 |
 | **清除 done/failed 标记** | 点击该行，或直接聚焦到该 agent 面板 |
@@ -78,7 +69,7 @@ tern plugin list        # 应显示:agent-sidebar 0.1.0 … ready
 ### 状态含义
 
 | 状态 | 颜色 | 含义 |
-|---|---|---|
+| --- | --- | --- |
 | working | accent 脉冲点 | agent 正在工作 |
 | idle | 空心点 | 空闲 |
 | needs you | 琥珀点 | 等待你输入 / 确认 |
@@ -124,10 +115,10 @@ tern plugin unlink agent-sidebar     # 移除 link 的
 插件只在本机 `kv.json` 存三个键，卸载后可手动清除：
 
 | 键 | 内容 |
-|---|---|
+| --- | --- |
 | `panel-open` | 面板显隐意愿（布尔） |
 | `panel-share` | 面板宽度比例（0.15–0.6） |
-| `finished` | 未查看的 done/failed 标记（`{paneId: "done"|"failed"}`） |
+| `finished` | 未查看的 done/failed 标记（`{paneId: "done" | "failed"}`） |
 
 ---
 
